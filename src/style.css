@@ -1,0 +1,340 @@
+/* Neon Warden: the HUD panels tilt toward the screen like an arcade cabinet. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 14px;
+  background: radial-gradient(ellipse at 50% 30%, #1a0f3a, #04020c 70%);
+  color: #e8fdff;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.cabinet {
+  display: grid;
+  grid-template-columns: 190px 480px 190px;
+  align-items: center;
+  perspective: 900px;
+}
+
+.panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(94, 242, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(14, 10, 34, 0.86);
+  box-shadow: 0 0 24px rgba(94, 242, 255, 0.15), inset 0 0 18px rgba(94, 242,
+    255, 0.08);
+  transition: opacity 400ms, transform 400ms;
+}
+
+/* Each panel swings toward the screen and slightly overlaps its edge. */
+.panel-left {
+  transform-origin: right center;
+  transform: translateX(18px) rotateY(24deg);
+}
+
+.panel-right {
+  transform-origin: left center;
+  transform: translateX(-18px) rotateY(calc(-1 *
+    24deg));
+}
+
+.cabinet[data-mode="title"] .panel,
+.cabinet[data-mode="cutscene"] .panel {
+  opacity: 0.55;
+}
+
+h2 {
+  margin: 0 0 4px;
+  font: 600 11px/1 Orbitron, "Trebuchet MS", sans-serif;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6f86a8;
+}
+
+output {
+  font-size: 22px;
+  color: #5ef2ff;
+  text-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+}
+
+#best {
+  font-size: 15px;
+  color: #ffe066;
+}
+
+.pips,
+.cells {
+  display: flex;
+  gap: 6px;
+}
+
+.pip,
+.cell {
+  height: 12px;
+  border: 1px solid currentColor;
+  opacity: 0.3;
+  transition: opacity 200ms, box-shadow 200ms;
+}
+
+.pip {
+  color: #ff5ea8;
+}
+
+.cell {
+  color: #ffe066;
+}
+
+.pip.lit,
+.cell.lit {
+  opacity: 1;
+  box-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+}
+
+.cell.lit {
+  background: currentColor;
+}
+
+.badge {
+  display: none;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid #ffe066;
+  border-radius: 10px;
+  color: #ffe066;
+  text-align: center;
+  font: 600 11px/1.4 Orbitron, "Trebuchet MS", sans-serif;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  animation: blink 1.2s steps(2) infinite;
+}
+
+.cabinet[data-mode="attract"] .badge {
+  display: block;
+}
+
+.screen {
+  position: relative;
+  width: 480px;
+  height: 640px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px rgba(94, 242, 255, 0.35), 0 0 40px rgba(94, 242, 255,
+    0.2);
+}
+
+#game,
+#game canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.route {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.stop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #6f86a8;
+}
+
+.stop[data-state="cleared"] {
+  color: #5ef2ff;
+}
+
+.stop[data-state="cleared"] .stop-dot {
+  background: currentColor;
+}
+
+.stop[data-state="current"] {
+  color: #ffe066;
+  text-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+}
+
+.stop[data-state="current"] .stop-dot {
+  animation: pulse 900ms ease-in-out infinite alternate;
+}
+
+.stop:last-child {
+  color: #ff4d6d;
+}
+
+.boss {
+  color: #ff4d6d;
+}
+
+.boss h2 {
+  color: inherit;
+}
+
+.boss-meter {
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+#boss-fill {
+  --fill: 1;
+  display: block;
+  height: 100%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+  transform-origin: left;
+  transform: scaleX(var(--fill));
+  transition: transform 120ms linear;
+}
+
+/* Sector banners flip down from the top of the screen, then fold away. */
+.banner {
+  position: absolute;
+  inset: 22% -6% auto;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  text-align: center;
+  background: linear-gradient(90deg, transparent, rgba(14, 10, 34, 0.9) 20% 80%,
+    transparent);
+  pointer-events: none;
+  opacity: 0;
+  transform: perspective(600px) rotateX(90deg);
+}
+
+.banner.show {
+  animation: banner 2.6s ease-in-out both;
+}
+
+.banner strong {
+  font: 700 26px/1.1 Orbitron, "Trebuchet MS", sans-serif;
+  letter-spacing: 0.12em;
+  color: #ffe066;
+  text-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+}
+
+.banner span {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #e8fdff;
+}
+
+.caption {
+  position: absolute;
+  inset: auto 8% 6%;
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 3px solid #5ef2ff;
+  background: rgba(4, 2, 12, 0.75);
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 500ms, transform 500ms;
+}
+
+.caption.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.help {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #6f86a8;
+}
+
+/* Impacts shake the whole cabinet; the panels keep their tilt while shaking. */
+.cabinet.shudder {
+  animation: shudder 260ms linear;
+}
+
+.cabinet.quake {
+  animation: quake 520ms linear;
+}
+
+@keyframes shudder {
+  25% {
+    transform: translate(-3px, 1px) rotateZ(-0.4deg);
+  }
+  50% {
+    transform: translate(3px, -1px) rotateZ(0.4deg);
+  }
+  75% {
+    transform: translate(-2px, 0) rotateZ(-0.2deg);
+  }
+}
+
+@keyframes quake {
+  10%,
+  50% {
+    transform: translate(-9px, 3px) rotateX(4deg) rotateZ(-1deg);
+  }
+  30%,
+  70% {
+    transform: translate(9px, -3px) rotateX(-4deg) rotateZ(1deg);
+  }
+  90% {
+    transform: translate(-3px, 1px);
+  }
+}
+
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: perspective(600px) rotateX(90deg);
+  }
+  15%,
+  80% {
+    opacity: 1;
+    transform: perspective(600px) rotateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: perspective(600px) rotateX(-90deg);
+  }
+}
+
+@keyframes pulse {
+  to {
+    box-shadow: 0 0 6px currentColor, 0 0 18px currentColor;
+    background: currentColor;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Narrow windows: stack the panels flat above and below the screen. */
+@media (max-width: 920px) {
+  .cabinet {
+    grid-template-columns: 480px;
+  }
+
+  .panel {
+    transform: none;
+  }
+
+  .panel-left {
+    order: -1;
+  }
+}
