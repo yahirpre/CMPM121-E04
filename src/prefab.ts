@@ -90,9 +90,6 @@ export class ShmupPrefabSprite extends Actor {
         arena.fire(this.x, this.y, aim(this, arena), 3.4);
         break;
       }
-      // case "dart":
-      //   if (this.age === 50) arena.fire(this.x, this.y, aim(this, arena), 3);
-      //   break;
       case "lancer":
         if (this.age % 40 !== 20 || this.x < 20 || this.x > WIDTH - 20) return;
         for (const spread of [-0.25, 0, 0.25]) {
@@ -211,27 +208,27 @@ export class ShmupBoss extends ShmupPrefabSprite {
 }
 
 export class ShmupPowerUp extends ShmupPrefabSprite {
-	constructor(scene: Phaser.Scene, x: number, y: number, kind) {
-		super(scene, x, y, kind, 0, 0, 14, 0, false, true, x, 1)
-	}
+  constructor(scene: Phaser.Scene, x: number, y: number, kind) {
+    super(scene, x, y, kind, 0, 0, 14, 0, false, true, x, 1);
+  }
 
-	override step(): void {
-		this.age++
-		this.y += 1.1
-		this.rotation += 0.04
-		this.setScale(1 + 0.12 * Math.sin(this.age * 0.15))
-	}
+  override step(): void {
+    this.age++;
+    this.y += 1.1;
+    this.rotation += 0.04;
+    this.setScale(1 + 0.12 * Math.sin(this.age * 0.15));
+  }
 
-	// power-ups can't shoot
-	override fireWeapon(): void {}
+  // power-ups can't shoot
+  override fireWeapon(): void {}
 
-	// power-ups can't be hurt
-	override takeDamage(): boolean {
-		return false
-	}
+  // power-ups can't be hurt
+  override takeDamage(): boolean {
+    return false;
+  }
 
-	// power-ups have no boss phases
-	override phase(): number {
-		return 0
-	}
+  // power-ups have no boss phases
+  override phase(): number {
+    return 0;
+  }
 }
