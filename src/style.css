@@ -144,7 +144,8 @@ output {
   height: var(--screen-height);
   border-radius: var(--panel-corner-radius);
   overflow: hidden;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan) 35%), 0 0 40px color-mix((--cyan), 20%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan) 35%), 0 0 40px
+    color-mix((--cyan), 20%);
 }
 
 #game,
