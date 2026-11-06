@@ -110,6 +110,11 @@ output {
   color: var(--yellow);
 }
 
+.cells .cell {
+  flex: 1;
+  border-radius: 2px;
+}
+
 .pip.lit,
 .cell.lit {
   opacity: 1;
@@ -145,7 +150,7 @@ output {
   border-radius: var(--panel-corner-radius);
   overflow: hidden;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan) 35%), 0 0 40px
-    color-mix((--cyan), 20%);
+    color-mix(in srgb, var(--cyan) 20%);
 }
 
 #game,
@@ -190,6 +195,12 @@ output {
 
 .stop:last-child {
   color: var(--red);
+}
+.stop-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
 }
 
 .boss {
@@ -283,6 +294,11 @@ output {
 
 .cabinet.quake {
   animation: quake 520ms linear;
+}
+.pips span {
+  width: 22px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: currentColor;
 }
 
 @keyframes shudder {
