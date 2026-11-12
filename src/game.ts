@@ -5,9 +5,16 @@ import {
   Bullet,
   HEIGHT,
   Player,
+  type PowerKind,
   WIDTH,
 } from "./actors.ts";
-import { ShmupBoss, ShmupPowerUp, ShmupPrefabSprite } from "./prefab.ts";
+import {
+  Enemy,
+  ENEMY_STATS,
+  EnemyKind,
+  ShmupBoss,
+  ShmupPowerUp,
+} from "./actors.ts";
 import type { Hud } from "./hud.ts";
 import type { LaunchOptions } from "./main.ts";
 import { AutoPilot, KeyboardPilot, type Pilot } from "./pilots.ts";
@@ -32,52 +39,6 @@ const STORY: [number, string][] = [
 const WARP_AT = 9;
 const CREDITS_AT = 11;
 const RETURN_AT = 18;
-
-type EnemyKind = "drone" | "dart" | "turret" | "lancer";
-
-interface EnemyStats {
-  hp: number;
-  score: number;
-  radius: number;
-  dropChance: number;
-  canShoot: boolean;
-  isPickup: boolean;
-}
-
-const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
-  drone: {
-    hp: 2,
-    score: 100,
-    radius: 13,
-    dropChance: 0.015,
-    canShoot: true,
-    isPickup: false,
-  },
-  dart: {
-    hp: 1,
-    score: 150,
-    radius: 12,
-    dropChance: 0.015,
-    canShoot: false,
-    isPickup: false,
-  },
-  turret: {
-    hp: 12,
-    score: 400,
-    radius: 19,
-    dropChance: 0.3,
-    canShoot: true,
-    isPickup: false,
-  },
-  lancer: {
-    hp: 4,
-    score: 250,
-    radius: 15,
-    dropChance: 0.06,
-    canShoot: true,
-    isPickup: false,
-  },
-};
 
 //layout constants
 
@@ -262,7 +223,7 @@ export class GameScene extends Phaser.Scene implements Arena {
   private run;
   private pilot!: Pilot;
   private backdrop!: Backdrop;
-  private enemies: ShmupPrefabSprite[] = [];
+  private enemies: Enemy[] = [];
   private shots: Bullet[] = [];
   private bullets: Bullet[] = [];
   private pickups: ShmupPowerUp[] = [];
@@ -646,7 +607,7 @@ export class GameScene extends Phaser.Scene implements Arena {
   private spawnEnemy({ kind, x, y, side }: SpawnOrder): void {
     const stats = ENEMY_STATS[kind];
     this.enemies.push(
-      new ShmupPrefabSprite(
+      new Enemy(
         this,
         x,
         y,
@@ -698,7 +659,7 @@ export class GameScene extends Phaser.Scene implements Arena {
     }
   }
 
-  private destroyEnemy(enemy: ShmupPrefabSprite): void {
+  private destroyEnemy(enemy: Enemy): void {
     enemy.setActive(false);
     this.run.score += enemy.stats.score;
     this.run.kills++;
@@ -708,7 +669,7 @@ export class GameScene extends Phaser.Scene implements Arena {
     }
     this.explode(enemy.x, enemy.y, 1);
     if (this.rng.chance(enemy.stats.dropChance)) {
-      const kind = this.player.power < 3 && this.rng.chance(0.5)
+      const kind: PowerKind = this.player.power < 3 && this.rng.chance(0.5)
         ? "spread"
         : "shield";
       this.pickups.push(new ShmupPowerUp(this, enemy.x, enemy.y, kind));
