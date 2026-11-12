@@ -41,13 +41,42 @@ interface EnemyStats {
   radius: number;
   dropChance: number;
   canShoot: boolean;
+  isPickup: boolean;
 }
 
 const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
-  drone: { hp: 2, score: 100, radius: 13, dropChance: 0.015, canShoot: true },
-  dart: { hp: 1, score: 150, radius: 12, dropChance: 0.015, canShoot: false },
-  turret: { hp: 12, score: 400, radius: 19, dropChance: 0.3, canShoot: true },
-  lancer: { hp: 4, score: 250, radius: 15, dropChance: 0.06, canShoot: true },
+  drone: {
+    hp: 2,
+    score: 100,
+    radius: 13,
+    dropChance: 0.015,
+    canShoot: true,
+    isPickup: false,
+  },
+  dart: {
+    hp: 1,
+    score: 150,
+    radius: 12,
+    dropChance: 0.015,
+    canShoot: false,
+    isPickup: false,
+  },
+  turret: {
+    hp: 12,
+    score: 400,
+    radius: 19,
+    dropChance: 0.3,
+    canShoot: true,
+    isPickup: false,
+  },
+  lancer: {
+    hp: 4,
+    score: 250,
+    radius: 15,
+    dropChance: 0.06,
+    canShoot: true,
+    isPickup: false,
+  },
 };
 
 //layout constants
@@ -615,19 +644,14 @@ export class GameScene extends Phaser.Scene implements Arena {
   }
 
   private spawnEnemy({ kind, x, y, side }: SpawnOrder): void {
-    const s = ENEMY_STATS[kind];
+    const stats = ENEMY_STATS[kind];
     this.enemies.push(
       new ShmupPrefabSprite(
         this,
         x,
         y,
         kind,
-        s.hp,
-        s.score,
-        s.radius,
-        s.dropChance,
-        s.canShoot,
-        false, // isPickup
+        stats,
         x, // homeX: enemies are anchored where they spawn
         side,
       ),
@@ -676,14 +700,14 @@ export class GameScene extends Phaser.Scene implements Arena {
 
   private destroyEnemy(enemy: ShmupPrefabSprite): void {
     enemy.setActive(false);
-    this.run.score += enemy.score;
+    this.run.score += enemy.stats.score;
     this.run.kills++;
     if (enemy === this.boss) {
       this.defeatBoss(this.boss);
       return;
     }
     this.explode(enemy.x, enemy.y, 1);
-    if (this.rng.chance(enemy.dropChance)) {
+    if (this.rng.chance(enemy.stats.dropChance)) {
       const kind = this.player.power < 3 && this.rng.chance(0.5)
         ? "spread"
         : "shield";
