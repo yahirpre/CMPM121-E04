@@ -1,9 +1,8 @@
 import Phaser from "phaser";
-import { HEIGHT, WIDTH } from "./actors.ts";
+import { HEIGHT, WIDTH } from "../actors.ts";
 
-/** Parallax space shared by every scene, plus the camera's glow treatment. */
 export class Backdrop {
-  /** Scroll speed multiplier; the cutscene raises it for the warp jump. */
+  // Scroll speed multiplier; the cutscene raises it for the warp jump
   warp = 1;
   private readonly layers: [Phaser.GameObjects.TileSprite, number][];
 
@@ -29,7 +28,7 @@ export class Backdrop {
     camera.filters.external.addVignette(0.5, 0.5, 0.75, 0.45);
   }
 
-  /** Scrolls by elapsed real time; scenery never affects gameplay. */
+  // Scrolls by elapsed real time; scenery never affects gameplay
   scroll(deltaMs: number): void {
     const frames = deltaMs / (1000 / 60);
     for (const [layer, speed] of this.layers) {

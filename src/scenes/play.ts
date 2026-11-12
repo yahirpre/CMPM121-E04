@@ -3,42 +3,42 @@ import {
   type Actor,
   type Arena,
   Bullet,
-  HEIGHT,
-  Player,
-  type PowerKind,
-  WIDTH,
-} from "./actors.ts";
-import {
   Enemy,
   ENEMY_STATS,
-  EnemyKind,
+  type EnemyKind,
+  Player,
+  type PowerKind,
   ShmupBoss,
   ShmupPowerUp,
-} from "./actors.ts";
-import type { Hud } from "./hud.ts";
-import type { LaunchOptions } from "./main.ts";
-import { AutoPilot, KeyboardPilot, type Pilot } from "./pilots.ts";
-import { Rng } from "./rng.ts";
-import { loadSounds, play } from "./sounds.ts";
-import { makeTextures, TINTS } from "./textures.ts";
+  WIDTH,
+} from "../actors.ts";
+import type { Hud } from "../hud.ts";
+import type { LaunchOptions } from "../main.ts";
+import { AutoPilot, KeyboardPilot, type Pilot } from "../pilots.ts";
+import { Rng } from "../rng.ts";
+import { play } from "../sounds.ts";
+import { TINTS } from "../textures.ts";
 import { Backdrop } from "./backdrop.ts";
+import { fadeIn, fadeTo, SCENES } from "./boot.ts";
+import type { CutsceneData } from "./cutscene.ts";
 
 const TICK_MS = 1000 / 60;
 const START_LIVES = 3;
 const BOSS_WARNING_TICKS = 200;
 const VICTORY_TICKS = 180;
-/** Seconds of idling before the title hands the ship to the autopilot. */
-const IDLE_SECONDS = 8;
 
-/** Lines of the closing story and when (seconds) each appears. */
-const STORY: [number, string][] = [
-  [0.8, "The Warden's lights go dark, one ring at a time."],
-  [4.2, "Behind you, five sectors of open sky."],
-  [7.6, "Ahead, the long way home."],
-];
-const WARP_AT = 9;
-const CREDITS_AT = 11;
-const RETURN_AT = 18;
+export interface RunStats {
+  score: number;
+  lives: number;
+  kills: number;
+  hits: number;
+  continues: number;
+  bossDefeated: boolean;
+}
+
+export interface PlayData {
+  attract: boolean;
+}
 
 //layout constants
 
@@ -48,11 +48,11 @@ const LEFT_EDGE_X = -30;
 const RIGHT_EDGE_X = 510;
 
 interface Spawn {
-  /** Frames after the wave's start. */
+  // frames after the waves start
   delay: number;
   x: number;
   y: number;
-  /** +1 / -1, alternating by index. */
+  // +1 / -1
   side: number;
 }
 
@@ -106,7 +106,6 @@ function pincerSpawns(count: number): Spawn[] {
 }
 
 interface Wave {
-  /** Frame (relative to the start of the sector) the wave begins on. */
   at: number;
   kind: EnemyKind;
   spawns: Spawn[];
@@ -212,15 +211,14 @@ function buildSchedule(waves: Wave[]): Map<number, SpawnOrder[]> {
   return schedule;
 }
 
-/** Indexed by sector number; built once at load. */
 const SCHEDULES = SECTORS.map(buildSchedule);
 
-export class GameScene extends Phaser.Scene implements Arena {
-  mode = "title";
+export class PlayScene extends Phaser.Scene implements Arena {
   rng!: Rng;
   player!: Player;
   now = 0;
-  private run;
+  private attract = false;
+  private run!: RunStats;
   private pilot!: Pilot;
   private backdrop!: Backdrop;
   private enemies: Enemy[] = [];
@@ -235,248 +233,86 @@ export class GameScene extends Phaser.Scene implements Arena {
   private gameOver = false;
   private carry = 0;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
-  private countdown!: Phaser.GameObjects.Text;
-  private idle = 0;
-  private leaving = false;
-  private cutsceneAfterDemo = false;
 
   constructor(
     private readonly hud: Hud,
     private readonly options: LaunchOptions,
   ) {
-    super("game");
+    super(SCENES.play);
   }
 
-  init(data: { mode?: string }): void {
-    // remember whether the cutscene follows a self-play run
-    if (data.mode === "cutscene") {
-      this.cutsceneAfterDemo = this.mode === "attract";
-    }
-    this.mode = data.mode ?? "title";
-    this.leaving = false;
-    if (this.mode === "title") {
-      this.idle = 0;
-    } else if (this.mode === "play" || this.mode === "attract") {
-      this.rng = new Rng(this.options.seed);
-      this.now = 0;
-      this.carry = 0;
-      this.run = {
-        score: 0,
-        lives: START_LIVES,
-        kills: 0,
-        hits: 0,
-        continues: 0,
-      };
-      this.enemies = [];
-      this.shots = [];
-      this.bullets = [];
-      this.pickups = [];
-      this.sector = -1;
-      this.boss = null;
-      this.bossDueAt = 0;
-      this.victoryAt = 0;
-      this.gameOver = false;
-    }
+  /** Phaser reuses this object for every run, so reset all per-run state. */
+  init(data: PlayData): void {
+    this.attract = data.attract;
+    this.rng = new Rng(this.options.seed);
+    this.now = 0;
+    this.carry = 0;
+    this.run = {
+      score: 0,
+      lives: START_LIVES,
+      kills: 0,
+      hits: 0,
+      continues: 0,
+      bossDefeated: false,
+    };
+    this.enemies = [];
+    this.shots = [];
+    this.bullets = [];
+    this.pickups = [];
+    this.sector = -1;
+    this.sectorStart = 0;
+    this.boss = null;
+    this.bossDueAt = 0;
+    this.victoryAt = 0;
+    this.gameOver = false;
   }
 
   create(): void {
-    // first run only: draw every texture and synthesize every sound
-    if (!this.textures.exists("player")) {
-      makeTextures(this);
-      loadSounds(this);
-    }
     this.backdrop = new Backdrop(this);
-    this.input.keyboard?.on("keydown-SPACE", () => this.onSpace());
-
-    if (this.mode === "title") {
-      this.hud.setMode("title");
-      this.hud.setRoute([
-        "Outer Drift",
-        "Shatter Belt",
-        "Gun Lanes",
-        "Lancer Gate",
-        "Last Approach",
-        "The Warden",
-      ]);
-      this.hud.setSector(-1);
-      this.hud.setBoss(null);
-      this.hud.say("");
-
-      const title = this.add.text(WIDTH / 2, HEIGHT * 0.34, "NEON\nWARDEN", {
-        fontFamily: "Orbitron, Trebuchet MS, sans-serif",
-        fontSize: "64px",
-        fontStyle: "bold",
-        align: "center",
-        color: "#e8fdff",
-      }).setOrigin(0.5).setLineSpacing(-6);
-      title.enableFilters();
-      title.filters?.internal.addGlow(0x5ef2ff, 6, 0, 1);
-      this.tweens.add({
-        targets: title,
-        scale: 1.04,
-        duration: 1400,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.inOut",
-      });
-
-      this.add.text(WIDTH / 2, HEIGHT * 0.62, "SPACE  launch", {
-        fontFamily: "monospace",
-        fontSize: "20px",
-        color: "#ffe066",
-      }).setOrigin(0.5);
-      this.countdown = this.add.text(WIDTH / 2, HEIGHT * 0.68, "", {
-        fontFamily: "monospace",
-        fontSize: "14px",
-        color: "#8aa4c8",
-      }).setOrigin(0.5);
-
-      this.cameras.main.fadeIn(400, 4, 2, 12);
-      if (this.options.attract) this.launch("attract");
-    } else if (this.mode === "play" || this.mode === "attract") {
-      this.player = new Player(this);
-      this.player.enableFilters();
-      this.player.filters?.internal.addGlow(TINTS.player, 4, 0, 1);
-      this.add.particles(0, 0, "spark", {
-        speedY: { min: 80, max: 160 },
-        speedX: { min: -20, max: 20 },
-        lifespan: 260,
-        scale: { start: 0.9, end: 0 },
-        tint: TINTS.player,
-        blendMode: "ADD",
-        frequency: 30,
-      }).startFollow(this.player, 0, 18);
-      this.sparks = this.add.particles(0, 0, "spark", {
-        speed: { min: 60, max: 260 },
-        lifespan: { min: 250, max: 600 },
-        scale: { start: 1.4, end: 0 },
-        blendMode: "ADD",
-        emitting: false,
-      });
-
-      this.pilot = this.mode === "attract"
-        ? new AutoPilot()
-        : new KeyboardPilot(this.input.keyboard!);
-      this.hud.setMode(this.mode === "attract" ? "attract" : "play");
-      this.cameras.main.fadeIn(400, 4, 2, 12);
-      this.startSector(0);
-    } else if (this.mode === "cutscene") {
-      const run = this.run;
-      this.hud.setMode("cutscene");
-      this.hud.setBoss(null);
-      this.cameras.main.fadeIn(600, 4, 2, 12);
-
-      const ship = this.add.image(WIDTH / 2, HEIGHT - 120, "player");
-      ship.enableFilters();
-      ship.filters?.internal.addGlow(TINTS.player, 5, 0, 1);
-      this.add.particles(0, 0, "spark", {
-        speedY: { min: 120, max: 260 },
-        lifespan: 420,
-        scale: { start: 1.2, end: 0 },
-        tint: TINTS.player,
-        blendMode: "ADD",
-        frequency: 16,
-      }).startFollow(ship, 0, 18);
-      this.tweens.add({
-        targets: ship,
-        y: HEIGHT - 140,
-        duration: 1600,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.inOut",
-      });
-
-      for (const [at, line] of STORY) {
-        this.time.delayedCall(at * 1000, () => this.hud.say(line));
-      }
-      this.time.delayedCall(WARP_AT * 1000, () => {
-        this.hud.say("");
-        play(this, "pickup", 0.7);
-        this.tweens.add({
-          targets: this.backdrop,
-          warp: 18,
-          duration: 900,
-          ease: "Quad.in",
-        });
-        this.tweens.killTweensOf(ship);
-        this.tweens.add({
-          targets: ship,
-          y: -80,
-          scale: 0.4,
-          duration: 1100,
-          ease: "Back.in",
-        });
-        this.time.delayedCall(
-          1000,
-          () => this.cameras.main.flash(500, 220, 250, 255),
-        );
-      });
-      this.time.delayedCall(CREDITS_AT * 1000, () => {
-        this.hud.announce("THANK YOU FOR PLAYING", `Final score ${run.score}`);
-        if (this.cutsceneAfterDemo) {
-          this.hud.say(
-            `Self-play: ${run.kills} kills, ${run.hits} hits, ${run.continues} continues`,
-          );
-        }
-      });
-      this.time.delayedCall(RETURN_AT * 1000, () => this.endCutscene());
+    if (this.attract) {
+      // any key during the demo goes back to the title
+      this.input.keyboard?.on(
+        "keydown-SPACE",
+        () => fadeTo(this, SCENES.title),
+      );
     }
+
+    this.player = new Player(this);
+    this.player.enableFilters();
+    this.player.filters?.internal.addGlow(TINTS.player, 4, 0, 1);
+    this.add.particles(0, 0, "spark", {
+      speedY: { min: 80, max: 160 },
+      speedX: { min: -20, max: 20 },
+      lifespan: 260,
+      scale: { start: 0.9, end: 0 },
+      tint: TINTS.player,
+      blendMode: "ADD",
+      frequency: 30,
+    }).startFollow(this.player, 0, 18);
+    this.sparks = this.add.particles(0, 0, "spark", {
+      speed: { min: 60, max: 260 },
+      lifespan: { min: 250, max: 600 },
+      scale: { start: 1.4, end: 0 },
+      blendMode: "ADD",
+      emitting: false,
+    });
+
+    this.pilot = this.attract
+      ? new AutoPilot()
+      : new KeyboardPilot(this.input.keyboard!);
+    this.hud.setMode(this.attract ? "attract" : "play");
+    fadeIn(this);
+    this.startSector(0);
   }
 
   override update(_time: number, delta: number): void {
     this.backdrop.scroll(delta);
-    if (this.mode === "title") {
-      if (this.leaving) return;
-      this.idle += delta / 1000;
-      const left = Math.ceil(IDLE_SECONDS - this.idle);
-      this.countdown.setText(`self-play demo in ${left}`);
-      if (left <= 0) this.launch("attract");
-    } else if (this.mode === "play" || this.mode === "attract") {
-      const speed = this.mode === "attract" ? this.options.speed : 1;
-      // the play branch runs one tick per frame
-      this.carry += Math.min(delta, 250) * speed;
-      while (this.carry >= TICK_MS && this.scene.isActive()) {
-        this.carry -= TICK_MS;
-        this.tick();
-      }
-    } else if (this.mode === "cutscene") {
-      // the cutscene runs on timers
+    const speed = this.attract ? this.options.speed : 1;
+    this.carry += Math.min(delta, 250) * speed;
+    while (this.carry >= TICK_MS && this.scene.isActive()) {
+      this.carry -= TICK_MS;
+      this.tick();
     }
-  }
-
-  private onSpace(): void {
-    if (this.mode === "title") {
-      this.launch("play");
-    } else if (this.mode === "attract") {
-      // any key during the demo goes back to the title
-      if (this.leaving) return;
-      this.leaving = true;
-      this.cameras.main.fadeOut(450, 4, 2, 12);
-      this.cameras.main.once("camerafadeoutcomplete", () => {
-        this.scene.restart({ mode: "title" });
-      });
-    } else if (this.mode === "cutscene") {
-      this.endCutscene();
-    }
-  }
-
-  private launch(mode: string): void {
-    if (this.leaving) return;
-    this.leaving = true;
-    this.cameras.main.fadeOut(450, 4, 2, 12);
-    this.cameras.main.once("camerafadeoutcomplete", () => {
-      this.scene.restart({ mode: mode });
-    });
-  }
-
-  private endCutscene(): void {
-    if (this.leaving) return;
-    this.leaving = true;
-    this.hud.say("");
-    this.cameras.main.fadeOut(450, 4, 2, 12);
-    this.cameras.main.once("camerafadeoutcomplete", () => {
-      this.scene.restart({ mode: "title" });
-    });
   }
 
   // Arena: what actors may ask of the scene.
@@ -538,11 +374,8 @@ export class GameScene extends Phaser.Scene implements Arena {
     if (this.gameOver) return;
     if (this.victoryAt > 0) {
       if (this.now === this.victoryAt) {
-        // fade out, then switch modes
-        this.cameras.main.fadeOut(450, 4, 2, 12);
-        this.cameras.main.once("camerafadeoutcomplete", () => {
-          this.scene.restart({ mode: "cutscene" });
-        });
+        const data: CutsceneData = { run: this.run, afterDemo: this.attract };
+        fadeTo(this, SCENES.cutscene, data);
       }
       return;
     }
@@ -613,7 +446,7 @@ export class GameScene extends Phaser.Scene implements Arena {
         y,
         kind,
         stats,
-        x, // homeX: enemies are anchored where they spawn
+        x, // homeX
         side,
       ),
     );
@@ -677,8 +510,8 @@ export class GameScene extends Phaser.Scene implements Arena {
   }
 
   private hurtPlayer(): void {
-    // After the Warden falls, nothing can hurt the ship during the victory lap.
-    if (this.run.bossDefeted || this.gameOver || !this.player.vulnerable) {
+    // after the Warden dies, nothing can hurt player
+    if (this.run.bossDefeated || this.gameOver || !this.player.vulnerable) {
       return;
     }
     this.run.hits++;
@@ -691,8 +524,8 @@ export class GameScene extends Phaser.Scene implements Arena {
     this.run.lives--;
     this.cameras.main.flash(180, 255, 80, 120);
     if (this.run.lives > 0) return;
-    if (this.mode === "attract") {
-      // The demo never ends early: self-play buys another ship and keeps going.
+    if (this.attract) {
+      // in attract mode, keep going after winning
       this.run.continues++;
       this.run.lives = START_LIVES;
       return;
@@ -702,12 +535,7 @@ export class GameScene extends Phaser.Scene implements Arena {
     this.player.setVisible(false);
     this.player.bubble.setVisible(false);
     this.explode(this.player.x, this.player.y, 2);
-    this.time.delayedCall(1800, () => {
-      this.cameras.main.fadeOut(450, 4, 2, 12);
-      this.cameras.main.once("camerafadeoutcomplete", () => {
-        this.scene.restart({ mode: "title" });
-      });
-    });
+    this.time.delayedCall(1800, () => fadeTo(this, SCENES.title));
   }
 
   private defeatBoss(boss: ShmupBoss): void {
@@ -715,7 +543,7 @@ export class GameScene extends Phaser.Scene implements Arena {
     this.victoryAt = this.now + VICTORY_TICKS;
     this.hud.setBoss(0);
     this.hud.announce("WARDEN DOWN", "The lanes are open");
-    console.log("victory lap: ship protected =", this.run.bossDefeted);
+    console.log("victory lap: ship protected =", this.run.bossDefeated);
     // The Warden's fall takes its bullets and escorts with it (no score).
     for (const bullet of this.bullets) {
       this.burst(bullet.x, bullet.y, 2, TINTS.spark);
@@ -773,7 +601,7 @@ export class GameScene extends Phaser.Scene implements Arena {
     this.sparks.explode(count, x, y);
   }
 
-  /** Destroys spent and offscreen actors. */
+  // Destroys spent and offscreen actors
   private cull(): void {
     const spent = (actor: Actor) => !actor.active || actor.isOffscreen();
     this.shots = sweep(this.shots, spent);
